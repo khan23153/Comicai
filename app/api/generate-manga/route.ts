@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+// Allow image generation (Replicate/OpenAI) to complete within 5 minutes
+export const maxDuration = 300;
+
 export interface MangaPanel {
   panel_number: number;
   image_prompt: string;
@@ -68,8 +71,8 @@ async function generateImageWithReplicate(prompt: string): Promise<string> {
     if (pollData.status === "succeeded" && Array.isArray(pollData.output) && pollData.output.length > 0) {
       return pollData.output[0] as string;
     }
-    if (pollData.status === "failed") {
-      throw new Error(`Image generation failed: ${String(pollData.error ?? "Unknown error")}`);
+    if (pollData.status === "failed" || pollData.status === "canceled") {
+      throw new Error(`Image generation failed: ${String(pollData.error ?? pollData.status)}`);
     }
   }
 
