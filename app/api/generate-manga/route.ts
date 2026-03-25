@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
 
     // Step 1: Use Gemini to structure the story into panels
     const genAI = new GoogleGenerativeAI(geminiApiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const panelCount = getPanelCount(layout);
 
