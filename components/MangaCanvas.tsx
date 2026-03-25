@@ -22,6 +22,7 @@ interface FabricCanvas {
   add: (...objects: unknown[]) => FabricCanvas;
   remove: (...objects: unknown[]) => FabricCanvas;
   getActiveObject: () => FabricObject | null;
+  getActiveObjects: () => FabricObject[];
   toDataURL: (options?: { format?: string; quality?: number; multiplier?: number }) => string;
   setWidth: (value: number) => void;
   setHeight: (value: number) => void;
@@ -323,8 +324,8 @@ const MangaCanvas = forwardRef<MangaCanvasHandle, MangaCanvasProps>(
       const canvas = fabricRef.current;
 
       const bubbleBg = new fabric.Rect({
-        left: 50,
-        top: 50,
+        left: 0,
+        top: 0,
         width: 200,
         height: 80,
         fill: "rgba(255,255,255,0.95)",
@@ -332,23 +333,26 @@ const MangaCanvas = forwardRef<MangaCanvasHandle, MangaCanvasProps>(
         ry: 20,
         stroke: "#000000",
         strokeWidth: 2,
-        selectable: true,
       });
-      canvas.add(bubbleBg);
 
       const bubbleText = new fabric.Textbox("Edit this text...", {
-        left: 60,
-        top: 68,
+        left: 10,
+        top: 18,
         width: 180,
         fontSize: 14,
         fill: "#000000",
         fontFamily: "Arial",
         fontWeight: "bold",
         textAlign: "center",
-        selectable: true,
         editable: true,
       });
-      canvas.add(bubbleText);
+
+      const group = new fabric.Group([bubbleBg, bubbleText], {
+        left: 50,
+        top: 50,
+        selectable: true,
+      });
+      canvas.add(group);
       canvas.renderAll();
     }, []);
 
@@ -358,30 +362,33 @@ const MangaCanvas = forwardRef<MangaCanvasHandle, MangaCanvasProps>(
       const canvas = fabricRef.current;
 
       const thoughtBg = new fabric.Ellipse({
-        left: 80,
-        top: 80,
+        left: 0,
+        top: 0,
         rx: 90,
         ry: 45,
         fill: "rgba(220,230,255,0.95)",
         stroke: "#000000",
         strokeWidth: 2,
-        selectable: true,
       });
-      canvas.add(thoughtBg);
 
       const thoughtText = new fabric.Textbox("Thinking...", {
-        left: 90,
-        top: 100,
+        left: 10,
+        top: 20,
         width: 160,
         fontSize: 13,
         fill: "#000000",
         fontFamily: "Arial",
         fontStyle: "italic",
         textAlign: "center",
-        selectable: true,
         editable: true,
       });
-      canvas.add(thoughtText);
+
+      const group = new fabric.Group([thoughtBg, thoughtText], {
+        left: 80,
+        top: 80,
+        selectable: true,
+      });
+      canvas.add(group);
       canvas.renderAll();
     }, []);
 
@@ -391,38 +398,41 @@ const MangaCanvas = forwardRef<MangaCanvasHandle, MangaCanvasProps>(
       const canvas = fabricRef.current;
 
       const narrationBg = new fabric.Rect({
-        left: 30,
-        top: 30,
+        left: 0,
+        top: 0,
         width: 250,
         height: 50,
         fill: "rgba(255,255,200,0.95)",
         rx: 4,
         ry: 4,
-        selectable: true,
       });
-      canvas.add(narrationBg);
 
       const narrationText = new fabric.Textbox("Narration text here...", {
-        left: 38,
-        top: 40,
+        left: 8,
+        top: 10,
         width: 234,
         fontSize: 12,
         fill: "#000000",
         fontFamily: "Arial",
         textAlign: "left",
-        selectable: true,
         editable: true,
       });
-      canvas.add(narrationText);
+
+      const group = new fabric.Group([narrationBg, narrationText], {
+        left: 30,
+        top: 30,
+        selectable: true,
+      });
+      canvas.add(group);
       canvas.renderAll();
     }, []);
 
     const deleteSelected = useCallback(() => {
       if (!fabricRef.current) return;
       const canvas = fabricRef.current;
-      const active = canvas.getActiveObject();
-      if (active) {
-        canvas.remove(active);
+      const activeObjects = canvas.getActiveObjects();
+      if (activeObjects.length > 0) {
+        activeObjects.forEach((obj) => canvas.remove(obj));
         canvas.discardActiveObject();
         canvas.requestRenderAll();
       }
