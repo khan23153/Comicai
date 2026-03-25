@@ -213,7 +213,6 @@ export async function POST(request: NextRequest) {
 
     // Step 1: Use Gemini to structure the story into panels
     const genAI = new GoogleGenerativeAI(geminiApiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const panelCount = getPanelCount(layout);
 
@@ -240,12 +239,30 @@ IMPORTANT: Return ONLY a valid JSON object with this exact structure, no markdow
   ]
 }`;
 
-    const result = await withGeminiRetry(() =>
-      model.generateContent([
-        systemPrompt,
-        `Story scenario: ${scenario}`,
-      ])
-    );
+    // Try models in order; fall back to the next if quota is exceeded
+    const GEMINI_FALLBACK_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash"];
+    const result = await (async () => {
+      let lastGeminiError: unknown = new Error("No Gemini models available");
+      for (const modelName of GEMINI_FALLBACK_MODELS) {
+        const model = genAI.getGenerativeModel({ model: modelName });
+        try {
+          return await withGeminiRetry(() =>
+            model.generateContent([
+              systemPrompt,
+              `Story scenario: ${scenario}`,
+            ])
+          );
+        } catch (error: unknown) {
+          lastGeminiError = error;
+          if (isQuotaExceededError(error)) {
+            console.warn(`Gemini model ${modelName} quota exceeded, trying next model...`);
+            continue;
+          }
+          throw error;
+        }
+      }
+      throw lastGeminiError;
+    })();
 
     const responseText = result.response.text();
 
