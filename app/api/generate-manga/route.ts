@@ -4,6 +4,67 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 // Allow image generation (Replicate/OpenAI) to complete within 5 minutes
 export const maxDuration = 300;
 
+const GEMINI_MAX_RETRIES = 3;
+const GEMINI_BASE_RETRY_DELAY_MS = 8000;
+
+const GEMINI_MAX_RETRY_DELAY_MS = 60000;
+
+/**
+ * Extract the retry delay (in ms) from a Gemini 429 error message if present,
+ * otherwise return a default delay. Falls back to defaultDelayMs if the
+ * expected "retry in Xs" format is not found in the message.
+ */
+function extractRetryDelayMs(error: unknown, defaultDelayMs: number): number {
+  if (error instanceof Error) {
+    // The error message may contain e.g. "Please retry in 7.241630552s."
+    const match = error.message.match(/retry in (\d+(?:\.\d+)?)s/i);
+    if (match) {
+      return Math.ceil(parseFloat(match[1]) * 1000);
+    }
+  }
+  return defaultDelayMs;
+}
+
+function isQuotaExceededError(error: unknown): boolean {
+  if (error instanceof Error) {
+    return (
+      error.message.includes("429") ||
+      error.message.toLowerCase().includes("quota") ||
+      error.message.toLowerCase().includes("too many requests")
+    );
+  }
+  return false;
+}
+
+/**
+ * Call a Gemini-based async function with automatic retry on 429 quota errors.
+ * Uses the retry delay suggested in the API error when available, with
+ * exponential backoff for subsequent retries.
+ */
+async function withGeminiRetry<T>(fn: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= GEMINI_MAX_RETRIES; attempt++) {
+    try {
+      return await fn();
+    } catch (error: unknown) {
+      lastError = error;
+      if (!isQuotaExceededError(error) || attempt === GEMINI_MAX_RETRIES) {
+        throw error;
+      }
+      const delayMs = Math.min(
+        extractRetryDelayMs(error, GEMINI_BASE_RETRY_DELAY_MS) *
+          Math.pow(2, attempt),
+        GEMINI_MAX_RETRY_DELAY_MS
+      );
+      console.warn(
+        `Gemini quota exceeded (attempt ${attempt + 1}/${GEMINI_MAX_RETRIES + 1}). Retrying in ${delayMs}ms...`
+      );
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw lastError;
+}
+
 export interface MangaPanel {
   panel_number: number;
   image_prompt: string;
@@ -179,10 +240,12 @@ IMPORTANT: Return ONLY a valid JSON object with this exact structure, no markdow
   ]
 }`;
 
-    const result = await model.generateContent([
-      systemPrompt,
-      `Story scenario: ${scenario}`,
-    ]);
+    const result = await withGeminiRetry(() =>
+      model.generateContent([
+        systemPrompt,
+        `Story scenario: ${scenario}`,
+      ])
+    );
 
     const responseText = result.response.text();
 
@@ -234,7 +297,11 @@ IMPORTANT: Return ONLY a valid JSON object with this exact structure, no markdow
     return NextResponse.json(response);
   } catch (error: unknown) {
     console.error("Error generating manga:", error);
-    const message = error instanceof Error ? error.message : "An unexpected error occurred";
+    let message = error instanceof Error ? error.message : "An unexpected error occurred";
+    if (isQuotaExceededError(error)) {
+      message =
+        "The AI service is currently rate-limited (free tier quota exceeded). Please wait a minute and try again.";
+    }
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
