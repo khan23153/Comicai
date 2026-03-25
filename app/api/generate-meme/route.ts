@@ -87,6 +87,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Cap input length to avoid excessive token use
+    if (scenario.length > 1000) {
+      return NextResponse.json(
+        { error: "scenario must be 1000 characters or fewer" },
+        { status: 400 }
+      );
+    }
+
     const count = Math.min(Math.max(Number(imageCount) || 2, 1), 4);
 
     // Step 1: Use Gemini to expand the scenario into detailed prompts
@@ -104,6 +112,8 @@ export async function POST(request: NextRequest) {
       detailedPrompts = JSON.parse(jsonMatch[0]);
       if (!Array.isArray(detailedPrompts))
         throw new Error("Parsed value is not an array");
+      if (!detailedPrompts.every((p) => typeof p === "string"))
+        throw new Error("Array items must all be strings");
     } catch {
       return NextResponse.json(
         { error: "Failed to parse Gemini response", raw: geminiText },

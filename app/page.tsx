@@ -98,6 +98,7 @@ export default function Home() {
               value={scenario}
               onChange={(e) => setScenario(e.target.value)}
               rows={3}
+              maxLength={1000}
               placeholder="e.g. Desi mom scolding son holding a flying chappal"
               className="w-full rounded-lg bg-gray-800 border border-gray-700 px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
             />

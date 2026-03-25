@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useImperativeHandle, forwardRef } from "react";
-import type { Canvas, FabricImage, FabricText, Rect } from "fabric";
+import type { Canvas, FabricImage, IText, FabricText, Rect, Group } from "fabric";
 
 export interface CanvasEditorHandle {
   addImage: (url: string) => void;
@@ -18,8 +18,12 @@ interface CanvasEditorProps {
 interface FabricRefs {
   canvas: Canvas;
   FabricImage: typeof FabricImage;
+  /** IText supports double-click editing; FabricText is static. */
+  IText: typeof IText;
+  /** FabricText is used only for non-interactive elements (e.g. watermark). */
   FabricText: typeof FabricText;
   Rect: typeof Rect;
+  Group: typeof Group;
 }
 
 const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(
@@ -41,6 +45,8 @@ const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(
           Rect: FabricRect,
           FabricText: FabricTextClass,
           FabricImage: FabricImageClass,
+          IText: ITextClass,
+          Group: GroupClass,
         } = await import("fabric");
 
         if (!canvasElRef.current) return;
@@ -56,7 +62,9 @@ const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(
           canvas,
           FabricImage: FabricImageClass,
           FabricText: FabricTextClass,
+          IText: ITextClass,
           Rect: FabricRect,
+          Group: GroupClass,
         };
       }
 
@@ -80,26 +88,30 @@ const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(
         if (!refs) return;
         const { canvas, FabricImage } = refs;
 
-        FabricImage.fromURL(url, { crossOrigin: "anonymous" }).then((img) => {
-          img.set({ left: 20, top: 20, selectable: true });
-          img.scaleToWidth(Math.min(width / 2 - 30, 360));
-          canvas.add(img);
-          canvas.renderAll();
-        });
+        FabricImage.fromURL(url, { crossOrigin: "anonymous" })
+          .then((img) => {
+            img.set({ left: 20, top: 20, selectable: true });
+            img.scaleToWidth(Math.min(width / 2 - 30, 360));
+            canvas.add(img);
+            canvas.renderAll();
+          })
+          .catch((err: unknown) => {
+            console.error("Failed to load image onto canvas:", err);
+          });
       },
 
       addText(text: string) {
         const refs = fabricRef.current;
         if (!refs) return;
-        const { canvas, FabricText } = refs;
+        const { canvas, IText } = refs;
 
-        const t = new FabricText(text, {
+        // IText supports double-click-to-edit; FabricText is static.
+        const t = new IText(text, {
           left: 50,
           top: 50,
           fontSize: 24,
           fill: "#ffffff",
           fontFamily: "Arial",
-          editable: true,
           selectable: true,
         });
         canvas.add(t);
@@ -110,11 +122,10 @@ const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(
       addSpeechBubble(text: string) {
         const refs = fabricRef.current;
         if (!refs) return;
-        const { canvas, Rect, FabricText } = refs;
+        const { canvas, Rect, IText, Group } = refs;
 
+        // Group the rounded-rect bubble and the editable text so they move together.
         const bubble = new Rect({
-          left: 60,
-          top: 60,
           width: 180,
           height: 70,
           fill: "#ffffff",
@@ -122,22 +133,26 @@ const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(
           ry: 18,
           stroke: "#374151",
           strokeWidth: 2,
-          selectable: true,
         });
 
-        const label = new FabricText(text, {
-          left: 75,
-          top: 80,
+        const label = new IText(text, {
+          left: 14,
+          top: 18,
           fontSize: 16,
           fill: "#111827",
           fontFamily: "Arial",
-          width: 150,
-          editable: true,
-          selectable: true,
+          width: 152,
         });
 
-        canvas.add(bubble, label);
-        canvas.setActiveObject(label);
+        const group = new Group([bubble, label], {
+          left: 60,
+          top: 60,
+          selectable: true,
+          subTargetCheck: true,
+        });
+
+        canvas.add(group);
+        canvas.setActiveObject(group);
         canvas.renderAll();
       },
 
@@ -146,7 +161,8 @@ const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(
         if (!refs) return "";
         const { canvas, FabricText } = refs;
 
-        // Add watermark temporarily
+        // Add watermark temporarily (FabricText is intentionally used here
+        // because the watermark is non-interactive).
         const watermark = new FabricText("MemeComicGen", {
           left: width - 140,
           top: height - 28,
